@@ -1,22 +1,45 @@
-name: Node.js CI
+name: Build and Deploy to Cloudflare Pages
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - main # Hoặc đổi thành 'master'/'dev' tùy theo tên nhánh mặc định của bạn
 
 jobs:
-  build:
-
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-
+  build-and-deploy:
+    runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-    - id: nvmrc
-      uses: browniebroke/read-nvmrc-action@v1
-    - uses: actions/setup-node@v1
-      with:
-        node-version: '${{ steps.nvmrc.outputs.node_version }}'
-    - run: npm ci
-    - run: npm run build
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install Emscripten & Rust
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y emscripten
+          rustup target add wasm32-unknown-unknown
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build WebAssembly Codecs
+        run: npm run build:codecs
+
+      - name: Build Production Website
+        run: npm run build
+
+      - name: Create Cloudflare Headers
+        run: |
+          echo -e "/*\n  Cross-Origin-Opener-Policy: same-origin\n  Cross-Origin-Embedder-Policy: require-corp" > build/_headers
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: 'ten-app-cua-ban' # SỬA THÀNH TÊN PROJECT BẠN ĐẶT TRÊN CLOUDFLARE PAGES
+          directory: 'build'
