@@ -1,0 +1,48 @@
+name: Build and Deploy to Cloudflare Pages
+
+on:
+  push:
+    branches:
+      - dev # Hoặc đổi thành 'main'/'master' tùy theo nhánh mặc định của bạn
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-with: 18
+
+      # Cài đặt môi trường dịch Wasm tự động trên GitHub
+      - name: Install Emscripten & Rust
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y emscripten
+          rustup target add wasm32-unknown-unknown
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build WebAssembly Codecs
+        run: npm run build:codecs
+
+      - name: Build Production Website
+        run: npm run build
+
+      # Thêm Headers bảo mật cho Cloudflare Pages tránh lỗi Wasm
+      - name: Create Cloudflare Headers
+        run: |
+          echo -e "/*\n  Cross-Origin-Opener-Policy: same-origin\n  Cross-Origin-Embedder-Policy: require-corp" > build/_headers
+
+      # Đẩy thẳng thành phẩm sang Cloudflare Pages
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: 'squoosh-app' # Đặt tên project của bạn trên Cloudflare
+          directory: 'build'
